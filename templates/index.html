@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Kick Stream Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
+        input, button { padding: 10px; font-size: 16px; margin: 5px; border-radius: 5px; border: none; }
+        input { width: 250px; background: #2d2d2d; color: white; border: 1px solid #444; }
+        button { background: #53fc18; color: black; font-weight: bold; cursor: pointer; }
+        button:hover { background: #42cb12; }
+        .status-box { margin-top: 15px; font-size: 18px; font-weight: bold; }
+        .online { color: #53fc18; }
+        .offline { color: #ff4a4a; }
+        video { width: 100%; max-width: 850px; margin-top: 20px; border: 2px solid #333; background: black; }
+    </style>
+</head>
+<body>
+
+    <h2>Просмотр Kick без задержки</h2>
+    
+    <form method="POST">
+        <input type="text" name="username" value="{{ username }}" placeholder="Введите ник стримера" required>
+        <button type="submit">Смотреть</button>
+    </form>
+
+    <div id="stream-status" class="status-box">
+        {% if error_msg %}
+            <span class="offline">{{ error_msg }}</span>
+        {% endif %}
+    </div>
+
+    {% if playback_url %}
+        <video id="video" controls autoplay playsinline></video>
+
+        <script>
+            var video = document.getElementById('video');
+            var statusBox = document.getElementById('stream-status');
+            var videoSrc = "{{ playback_url | safe }}";
+
+            // Изначально ставим статус, что всё ок
+            statusBox.innerHTML = '<span class="online">● Стрим онлайн! Загрузка потока...</span>';
+
+            if (Hls.isSupported()) {
+                var hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    maxBufferLength: 1, // Убираем буферизацию до 1 секунды
+                    liveBackBufferLength: 0,
+                    manifestLoadingMaxRetry: 1, // Если стрим упал, не пытаться бесконечно перезагружать файл разметки
+                    fragLoadingMaxRetry: 2
+                });
+                
+                hls.loadSource(videoSrc);
+                hls.attachMedia(video);
+
+                // ОТСЛЕЖИВАНИЕ ОШИБОК И КОНЦА СТРИМА
+                hls.on(Hls.Events.ERROR, function (event, data) {
+                    console.log("Ошибка плеера:", data.details);
+                    
+                    // Если сеть упала или сервер перестал отдавать куски (стрим выключили)
+                    if (data.details === 'manifestLoadError' || data.details === 'fragLoadError') {
+                        statusBox.innerHTML = '<span class="offline">■ Трансляция завершена или стример ушел в оффлайн</span>';
+                        hls.destroy(); // Убиваем плеер, чтобы не грузил сеть
+                    }
+                });
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Нативная поддержка для Safari (iOS/Mac)
+                video.src = videoSrc;
+                
+                // Для Safari отслеживаем стандартное событие обрыва потока
+                video.addEventListener('stalled', function() {
+                    statusBox.innerHTML = '<span class="offline">■ Трансляция завершена (поток остановлен)</span>';
+                });
+            }
+        </script>
+    {% endif %}
+
+</body>
+</html>
