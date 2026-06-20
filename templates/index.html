@@ -3,17 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <title>Kick Stream Viewer</title>
+    <link rel="icon" href="data:,"> 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { font-family: Arial, sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
-        input, button { padding: 10px; font-size: 16px; margin: 5px; border-radius: 5px; border: none; }
-        input { width: 250px; background: #2d2d2d; color: white; border: 1px solid #444; }
-        button { background: #53fc18; color: black; font-weight: bold; cursor: pointer; }
-        button:hover { background: #42cb12; }
-        .status-box { margin-top: 15px; font-size: 18px; font-weight: bold; }
-        .online { color: #53fc18; }
-        .offline { color: #ff4a4a; }
-        video { width: 100%; max-width: 850px; margin-top: 20px; border: 2px solid #333; background: black; }
+        body { 
+            font-family: Arial, sans-serif; 
+            background: #1a1a1a; 
+            color: white; 
+            text-align: center; 
+            padding: 20px; 
+        }
+        input, button { 
+            padding: 10px; 
+            font-size: 16px; 
+            margin: 5px; 
+            border-radius: 5px; 
+            border: none; 
+        }
+        input { 
+            width: 250px; 
+            background: #2d2d2d; 
+            color: white; 
+            border: 1px solid #444; 
+        }
+        button { 
+            background: #53fc18; 
+            color: black; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
+        button:hover { 
+            background: #42cb12; 
+        }
+        .status-box { 
+            margin-top: 15px; 
+            font-size: 18px; 
+            font-weight: bold; 
+        }
+        .online { 
+            color: #53fc18; 
+        }
+        .offline { 
+            color: #ff4a4a; 
+        }
+        video { 
+            width: 100%; 
+            max-width: 850px; 
+            margin-top: 20px; 
+            border: 2px solid #333; 
+            background: black; 
+        }
     </style>
 </head>
 <body>
@@ -39,38 +78,49 @@
             var statusBox = document.getElementById('stream-status');
             var videoSrc = "{{ playback_url | safe }}";
 
-            // Изначально ставим статус, что всё ок
+            // Начальный статус при отправке ссылки в плеер
             statusBox.innerHTML = '<span class="online">● Стрим онлайн! Загрузка потока...</span>';
 
             if (Hls.isSupported()) {
                 var hls = new Hls({
                     enableWorker: true,
                     lowLatencyMode: true,
-                    maxBufferLength: 1, // Убираем буферизацию до 1 секунды
-                    liveBackBufferLength: 0,
-                    manifestLoadingMaxRetry: 1, // Если стрим упал, не пытаться бесконечно перезагружать файл разметки
-                    fragLoadingMaxRetry: 2
+                    maxBufferLength: 1, // Убираем буфер в 1 секунду для минимального пинга
+                    liveBackBufferLength: 0
                 });
                 
                 hls.loadSource(videoSrc);
                 hls.attachMedia(video);
 
-                // ОТСЛЕЖИВАНИЕ ОШИБОК И КОНЦА СТРИМА
+                // Умная обработка сетевых и медиа ошибок
                 hls.on(Hls.Events.ERROR, function (event, data) {
-                    console.log("Ошибка плеера:", data.details);
-                    
-                    // Если сеть упала или сервер перестал отдавать куски (стрим выключили)
-                    if (data.details === 'manifestLoadError' || data.details === 'fragLoadError') {
-                        statusBox.innerHTML = '<span class="offline">■ Трансляция завершена или стример ушел в оффлайн</span>';
-                        hls.destroy(); // Убиваем плеер, чтобы не грузил сеть
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log("Проблема с сетью, перезапускаем загрузку чанков...");
+                                hls.startLoad();
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log("Ошибка медиа-потока, восстанавливаем плеер...");
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                // Если падение критическое и Амазон больше ничего не отдает
+                                statusBox.innerHTML = '<span class="offline">■ Трансляция завершена или стример ушел в оффлайн</span>';
+                                hls.destroy();
+                                break;
+                        }
                     }
                 });
 
+                // Когда стрим успешно подгрузился и пошел первый кадр
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    statusBox.innerHTML = '<span class="online">● В эфире</span>';
+                });
+
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Нативная поддержка для Safari (iOS/Mac)
+                // Нативный плеер для девайсов Apple (iOS/Safari)
                 video.src = videoSrc;
-                
-                // Для Safari отслеживаем стандартное событие обрыва потока
                 video.addEventListener('stalled', function() {
                     statusBox.innerHTML = '<span class="offline">■ Трансляция завершена (поток остановлен)</span>';
                 });
