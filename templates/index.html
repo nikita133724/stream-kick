@@ -2,65 +2,76 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Kick Stream Viewer</title>
+    <!-- Эта строка делает сайт адаптивным под мобилки -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kick Mobile Viewer</title>
     <link rel="icon" href="data:,"> 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
-            font-family: Arial, sans-serif; 
-            background: #1a1a1a; 
-            color: white; 
-            text-align: center; 
-            padding: 20px; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; 
+            background: #121212; 
+            color: #ffffff; 
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        input, button { 
-            padding: 10px; 
-            font-size: 16px; 
-            margin: 5px; 
-            border-radius: 5px; 
-            border: none; 
+        h2 { margin: 20px 0 15px 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+        form { 
+            width: 100%; 
+            max-width: 500px; 
+            display: flex; 
+            gap: 8px;
+            margin-bottom: 15px;
         }
         input { 
-            width: 250px; 
-            background: #2d2d2d; 
+            flex: 1;
+            padding: 14px; 
+            font-size: 16px; 
+            background: #1e1e1e; 
             color: white; 
-            border: 1px solid #444; 
+            border: 1px solid #333; 
+            border-radius: 8px;
+            outline: none;
         }
+        input:focus { border-color: #53fc18; }
         button { 
+            padding: 14px 24px; 
+            font-size: 16px; 
             background: #53fc18; 
             color: black; 
             font-weight: bold; 
+            border: none;
+            border-radius: 8px;
             cursor: pointer; 
+            transition: background 0.2s;
         }
-        button:hover { 
-            background: #42cb12; 
+        button:hover { background: #42cb12; }
+        .status-box { font-size: 15px; font-weight: bold; margin-bottom: 15px; }
+        .online { color: #53fc18; }
+        .offline { color: #ff4a4a; }
+        .video-container {
+            width: 100%;
+            max-width: 850px;
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #222;
+            margin-top: 10px;
         }
-        .status-box { 
-            margin-top: 15px; 
-            font-size: 18px; 
-            font-weight: bold; 
-        }
-        .online { 
-            color: #53fc18; 
-        }
-        .offline { 
-            color: #ff4a4a; 
-        }
-        video { 
-            width: 100%; 
-            max-width: 850px; 
-            margin-top: 20px; 
-            border: 2px solid #333; 
-            background: black; 
-        }
+        video { width: 100%; height: 100%; object-fit: contain; }
     </style>
 </head>
 <body>
 
-    <h2>Просмотр Kick без задержки</h2>
+    <h2>Kick без задержки</h2>
     
     <form method="POST">
-        <input type="text" name="username" value="{{ username }}" placeholder="Введите ник стримера" required>
+        <input type="text" name="username" value="{{ username }}" placeholder="Никнейм стримера" required autocomplete="off">
         <button type="submit">Смотреть</button>
     </form>
 
@@ -71,58 +82,56 @@
     </div>
 
     {% if playback_url %}
-        <video id="video" controls autoplay playsinline></video>
+        <div class="video-container">
+            <video id="video" controls autoplay playsinline></video>
+        </div>
 
         <script>
             var video = document.getElementById('video');
             var statusBox = document.getElementById('stream-status');
             var videoSrc = "{{ playback_url | safe }}";
 
-            // Начальный статус при отправке ссылки в плеер
-            statusBox.innerHTML = '<span class="online">● Стрим онлайн! Загрузка потока...</span>';
+            statusBox.innerHTML = '<span class="online">● Загрузка потока...</span>';
 
             if (Hls.isSupported()) {
                 var hls = new Hls({
                     enableWorker: true,
                     lowLatencyMode: true,
-                    maxBufferLength: 1, // Убираем буфер в 1 секунду для минимального пинга
-                    liveBackBufferLength: 0
+                    maxBufferLength: 4,
+                    maxMaxBufferLength: 6,
+                    liveSyncDurationCount: 2,
+                    liveDurationInfinity: true,
+                    highBufferWatchdogPeriod: 2
                 });
                 
                 hls.loadSource(videoSrc);
                 hls.attachMedia(video);
 
-                // Умная обработка сетевых и медиа ошибок
                 hls.on(Hls.Events.ERROR, function (event, data) {
                     if (data.fatal) {
                         switch (data.type) {
                             case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.log("Проблема с сетью, перезапускаем загрузку чанков...");
                                 hls.startLoad();
                                 break;
                             case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.log("Ошибка медиа-потока, восстанавливаем плеер...");
                                 hls.recoverMediaError();
                                 break;
                             default:
-                                // Если падение критическое и Амазон больше ничего не отдает
-                                statusBox.innerHTML = '<span class="offline">■ Трансляция завершена или стример ушел в оффлайн</span>';
+                                statusBox.innerHTML = '<span class="offline">■ Трансляция завершена</span>';
                                 hls.destroy();
                                 break;
                         }
                     }
                 });
 
-                // Когда стрим успешно подгрузился и пошел первый кадр
                 hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    statusBox.innerHTML = '<span class="online">● В эфире</span>';
+                    statusBox.innerHTML = '<span class="online">● В эфире (Низкая задержка)</span>';
                 });
 
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Нативный плеер для девайсов Apple (iOS/Safari)
                 video.src = videoSrc;
                 video.addEventListener('stalled', function() {
-                    statusBox.innerHTML = '<span class="offline">■ Трансляция завершена (поток остановлен)</span>';
+                    statusBox.innerHTML = '<span class="offline">■ Трансляция завершена</span>';
                 });
             }
         </script>
