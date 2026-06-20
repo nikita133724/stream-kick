@@ -14,7 +14,12 @@ HEADERS = {
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "playback_url": None, "error_msg": None, "username": ""})
+    # Исправленный синтаксис передачи контекста в шаблон
+    return templates.TemplateResponse(
+        request=request, 
+        name="index.html", 
+        context={"playback_url": None, "error_msg": None, "username": ""}
+    )
 
 @app.post("/", response_class=HTMLResponse)
 async def get_stream(request: Request, username: str = Form(...)):
@@ -25,7 +30,6 @@ async def get_stream(request: Request, username: str = Form(...)):
     if username:
         try:
             url = f"https://kick.com/api/v2/channels/{username}"
-            # Асинхронно дергаем Kick через curl_cffi
             response = requests.get(url, headers=HEADERS, impersonate="chrome", timeout=10)
             
             if response.status_code == 200:
@@ -41,14 +45,17 @@ async def get_stream(request: Request, username: str = Form(...)):
         except Exception as e:
             error_msg = f"Ошибка сервера: {str(e)}"
 
-    return templates.TemplateResponse("index.html", {
-        "request": request, 
-        "playback_url": playback_url, 
-        "error_msg": error_msg, 
-        "username": username
-    })
+    # Здесь синтаксис тоже исправлен
+    return templates.TemplateResponse(
+        request=request, 
+        name="index.html", 
+        context={
+            "playback_url": playback_url, 
+            "error_msg": error_msg, 
+            "username": username
+        }
+    )
 
-# Роут-заглушка для favicon, чтобы не спамить в консоль
 @app.get("/favicon.ico")
 async def favicon():
     return Response(status_code=204)
