@@ -1,5 +1,1 @@
-fastapi
-uvicorn
-curl_cffi
-jinja2
-python-multipart
+requests
