@@ -96,19 +96,20 @@ def keep_alive():
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("0.0.0.0", PORT))
         sock.listen(1)
-        log(f"✓ Server listening on port {PORT}")
-        log(f"✓ Service is live at https://parserwebsocket.onrender.com")
+        log(f"Server listening on port {PORT}")
+        log(f"Service is live at https://parserwebsocket.onrender.com")
         
         while True:
             conn, addr = sock.accept()
             try:
                 data = conn.recv(1024)
                 if data:
-                    response = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
                     if checks_passed:
-                        response += b"<h1>✅ All checks passed</h1><p>Supabase connection successful</p>"
+                        response = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+                        response += b"<h1>All checks passed</h1><p>Supabase connection successful</p>"
                     else:
-                        response += b"<h1>❌ Some checks failed</h1><p>Check logs for details</p>"
+                        response = b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+                        response += b"<h1>Some checks failed</h1><p>Check logs for details</p>"
                     conn.send(response)
             except Exception as e:
                 log(f"Connection error: {e}")
